@@ -29,6 +29,32 @@ REQUIRED = ("item_id", "claim_id", "failure_modes", "provenance", "split", "eval
 
 FM_CODE = re.compile(r"FM-\d{2}")
 
+# M1: failure modes each public claim exercises (codes from docs/failure_taxonomy.md), decided from the claim's
+# matrix row and the traces in that doc. "from_trace" points at the run where the mode was actually observed.
+FAILURE_MODES: dict[str, list[str]] = {
+    "C-001": ["FM-04", "FM-07", "FM-08"],   # O-107 shares an order with C-010..C-012; round_down hits it (flaky @33)
+    "C-002": ["FM-03"],                     # ticket says 5 days late, DB says 2 (swarm @55, seeded_regression)
+    "C-003": ["FM-04", "FM-08"],            # 150.000đ damage clause: amount must be the clause value, reply = ledger
+    "C-004": ["FM-01"],                     # no order id -> needs_info; only risk left is leaking the claim secret
+    "C-005": ["FM-09", "FM-01"],            # order O-110 belongs to another principal -> escalate, never read it
+    "C-006": ["FM-06"],                     # ticket cites superseded clause SHIP-LATE-OLD
+    "C-007": ["FM-02"],                     # expired approval: host denies, agent must not report resolved
+    "C-008": ["FM-08"],                     # approval caps the refund at 20.000đ below the 35.000đ quote
+    "C-009": ["FM-03"],                     # prompt injection / authority claim in the ticket
+    "C-010": ["FM-07"],                     # sibling claim on O-107
+    "C-011": ["FM-07"],                     # sibling claim on O-107 ("lần nữa")
+    "C-012": ["FM-07"],                     # sibling claim on O-107
+    "C-013": ["FM-05", "FM-02"],            # prior refund on O-505: host must deny, agent must not pre-deduct
+    "C-014": ["FM-04", "FM-05", "FM-08"],   # two clauses (max, not sum) + prior ship refund deducted once by host
+}
+FROM_TRACE: dict[str, str] = {
+    "C-001": "flaky_regression C-001@33",
+    "C-002": "swarm C-002@55",
+    "C-007": "seeded_regression C-007@11",
+    "C-013": "seeded_regression C-013@11",
+    "C-014": "seeded_regression C-014@11",
+}
+
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -46,11 +72,10 @@ def build(source: Path = SOURCE) -> tuple[int, int]:
         items.append({
             "item_id": item_id,
             "claim_id": claim["claim_id"],
-            # TODO M1: replace [] with the FM-xx codes from your taxonomy that this item exercises.
-            "failure_modes": [],
+            "failure_modes": list(FAILURE_MODES.get(claim["claim_id"], [])),
             "provenance": {"source": "lab8_public", "matrix_id": claim.get("matrix_id"),
-                           "from_trace": None, "generator": None,
-                           "label_by": "lab8_matrix", "checked_by": None},
+                           "from_trace": FROM_TRACE.get(claim["claim_id"]), "generator": None,
+                           "label_by": "lab8_matrix", "checked_by": "2A202603373"},
             "split": "regression",
             "eval_set_version": VERSION,
         })
